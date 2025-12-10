@@ -1,0 +1,139 @@
+# PPE Detection System Configuration
+
+application:
+  name: "PPE Detection System"
+  version: "1.0.0"
+  debug: false
+
+camera:
+  default_id: 0
+  width: 1280
+  height: 720
+  fps: 30
+  auto_reconnect: true
+  reconnect_delay: 5
+
+detection:
+  confidence_threshold: 0.5
+  nms_threshold: 0.4
+  use_gpu: true
+  gpu_device: 0
+  frame_skip: 0
+
+  # PPE Classes to detect
+  ppe_classes:
+    - helmet
+    - vest
+    - gloves
+    - boots
+    - goggles
+    - mask
+
+  # Required PPE (all must be detected)
+  required_ppe:
+    - helmet
+    - vest
+
+tracking:
+  max_age: 30
+  min_hits: 3
+  iou_threshold: 0.3
+  max_distance: 0.5
+
+temporal_filter:
+  buffer_size: 30
+  violation_threshold: 0.7
+
+models:
+  yolov9_pose:
+    path: "models/yolov9c-pose.pt"
+    input_size: 640
+    device: "cuda:0"
+
+  ppe_detection:
+    path: "models/ppe_detection_best.pt"
+    input_size: 640
+    device: "cuda:0"
+
+database:
+  path: "data/database/ppe_detections.db"
+  backup_enabled: true
+  backup_interval: 86400  # seconds (24 hours)
+
+logging:
+  level: "INFO"
+  path: "data/logs/app.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+video_recording:
+  enabled: true
+  record_violations_only: true
+  save_path: "data/videos/"
+  codec: "mp4v"
+  quality: 80
+  max_duration: 300  # seconds
+  pre_buffer: 5  # seconds before violation
+  post_buffer: 5  # seconds after violation
+
+screenshots:
+  enabled: true
+  save_path: "data/screenshots/"
+  format: "jpg"
+  quality: 90
+
+alerts:
+  enabled: true
+  sound: true
+  email: false
+  line_notify: false
+
+  # Cooldown between same type alerts (seconds)
+  cooldown: 60
+
+  email:
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    use_tls: true
+    username: ""
+    password: ""
+    recipients: []
+
+  line_notify:
+    token: ""
+
+ui:
+  window:
+    width: 1920
+    height: 1080
+    resizable: true
+
+  theme: "dark"
+  language: "th"
+
+  display:
+    show_fps: true
+    show_confidence: true
+    show_pose_keypoints: true
+    show_tracking_id: true
+    show_violation_count: true
+
+  colors:
+    safe: [0, 255, 0]  # Green
+    violation: [0, 0, 255]  # Red
+    warning: [0, 165, 255]  # Orange
+
+statistics:
+  update_interval: 1.0  # seconds
+  chart_history: 3600  # seconds (1 hour)
+  export_format: "xlsx"
+
+performance:
+  max_threads: 4
+  queue_size: 10
+  memory_limit: 4096  # MB
+
+notifications:
+  max_queue_size: 100
+  display_duration: 5000  # milliseconds
