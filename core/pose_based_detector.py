@@ -35,16 +35,20 @@ class PoseBasedDetector:
         # Initialize components
         print("🚀 Initializing PPE Detection System...")
 
+        # Get device from models config or fallback
+        pose_device = config.get("models", {}).get("yolov8_pose", {}).get("device", "cuda:0")
+        ppe_device = config.get("models", {}).get("ppe_detection", {}).get("device", "cuda:0")
+
         self.pose_detector = PoseDetector(
             model_path=pose_model_path,
-            device=config["detection"]["device"],
+            device=pose_device,
             conf_threshold=config["detection"]["confidence_threshold"],
             iou_threshold=config["detection"]["nms_threshold"],
         )
 
         self.ppe_detector = PPEDetector(
             model_path=ppe_model_path,
-            device=config["detection"]["device"],
+            device=ppe_device,
             conf_threshold=config["detection"]["confidence_threshold"],
             iou_threshold=config["detection"]["nms_threshold"],
             required_ppe=config["detection"]["required_ppe"],
