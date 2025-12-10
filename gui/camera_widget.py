@@ -68,32 +68,47 @@ class CameraWidget(QWidget):
         """
         self.detector = detector
 
-    def start_camera(self, camera_id: int = 0):
+    def start_camera(self, camera_source=0, camera_config: Optional[Dict[str, Any]] = None):
         """
-        Start camera capture.
+        Start camera capture from USB, RTSP, or file.
 
         Args:
-            camera_id: Camera device ID
+            camera_source: Camera device ID (int) or RTSP URL (str) or file path (str)
+            camera_config: Camera configuration (width, height, fps)
         """
         if self.is_running:
             return
 
         try:
-            self.camera = cv2.VideoCapture(camera_id)
+            # Determine source type
+            if isinstance(camera_source, int):
+                source_type = "USB"
+                source_desc = f"Camera {camera_source}"
+            elif camera_source.startswith("rtsp://"):
+                source_type = "RTSP"
+                source_desc = "RTSP Camera"
+            else:
+                source_type = "File"
+                source_desc = camera_source
+
+            self.camera = cv2.VideoCapture(camera_source)
 
             if not self.camera.isOpened():
-                self.status_changed.emit(f"❌ Failed to open camera {camera_id}")
+                self.status_changed.emit(f"❌ Failed to open {source_type}: {source_desc}")
                 return
 
-            # Set camera properties
-            cam_config = self.config["camera"]
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, cam_config["width"])
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_config["height"])
-            self.camera.set(cv2.CAP_PROP_FPS, cam_config["fps"])
+            # Set camera properties (if applicable)
+            cam_conf = camera_config or self.config["camera"]
+
+            # For USB and some RTSP cameras, we can set properties
+            if isinstance(camera_source, int) or source_type == "RTSP":
+                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, cam_conf["width"])
+                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_conf["height"])
+                self.camera.set(cv2.CAP_PROP_FPS, cam_conf["fps"])
 
             self.is_running = True
             self.timer.start(30)  # 30ms = ~33 FPS
-            self.status_changed.emit(f"✅ Camera {camera_id} started")
+            self.status_changed.emit(f"✅ {source_type} started: {source_desc}")
 
         except Exception as e:
             self.status_changed.emit(f"❌ Error: {str(e)}")

@@ -125,6 +125,20 @@ class MainWindow(QMainWindow):
         toggle_fps_action.triggered.connect(self.on_toggle_fps)
         view_menu.addAction(toggle_fps_action)
 
+        # Camera menu
+        camera_menu = menubar.addMenu("&Camera")
+
+        connect_camera_action = QAction("📹 &Connect Camera", self)
+        connect_camera_action.setShortcut("Ctrl+K")
+        connect_camera_action.triggered.connect(self.on_connect_camera)
+        camera_menu.addAction(connect_camera_action)
+
+        camera_menu.addSeparator()
+
+        disconnect_camera_action = QAction("⏹️ &Disconnect", self)
+        disconnect_camera_action.triggered.connect(self.on_disconnect_camera)
+        camera_menu.addAction(disconnect_camera_action)
+
         # Settings menu
         settings_menu = menubar.addMenu("&Settings")
 
@@ -205,6 +219,56 @@ class MainWindow(QMainWindow):
 
         if filename:
             self.camera_widget.open_video_file(filename)
+
+    def on_connect_camera(self):
+        """Open camera connection dialog."""
+        from .camera_connection_dialog import CameraConnectionDialog
+
+        # Get current camera config if exists
+        current_config = getattr(self, 'camera_config', None)
+
+        # Create and show dialog
+        dialog = CameraConnectionDialog(self, current_config)
+        dialog.camera_selected.connect(self.on_camera_selected)
+
+        if dialog.exec():
+            pass  # Connection handled by signal
+
+    def on_camera_selected(self, config: Dict[str, Any]):
+        """
+        Handle camera source selection.
+
+        Args:
+            config: Camera configuration
+        """
+        # Save configuration
+        self.camera_config = config
+
+        # Stop current camera if running
+        if self.camera_widget.is_running:
+            self.camera_widget.stop_camera()
+
+        # Start camera with new source
+        source = config["source"]
+        camera_conf = {
+            "width": config["width"],
+            "height": config["height"],
+            "fps": config["fps"],
+        }
+
+        self.camera_widget.start_camera(source, camera_conf)
+
+        # Update status
+        source_type = config["type"].upper()
+        self.status_bar.showMessage(f"เชื่อมต่อ {source_type} camera สำเร็จ")
+
+    def on_disconnect_camera(self):
+        """Disconnect current camera."""
+        if self.camera_widget.is_running:
+            self.camera_widget.stop_camera()
+            self.status_bar.showMessage("ตัดการเชื่อมต่อกล้องแล้ว")
+        else:
+            self.status_bar.showMessage("ไม่มีกล้องที่เชื่อมต่ออยู่")
 
     def on_toggle_pose_keypoints(self, checked: bool):
         """Toggle pose keypoints display."""
