@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  ppe-detection:
+    build: .
+    container_name: ppe_detection_system
+    restart: unless-stopped
+
+    environment:
+      - USE_GPU=False
+      - DEFAULT_CAMERA_ID=0
+      - CONFIDENCE_THRESHOLD=0.5
+
+    volumes:
+      # Mount data directories for persistence
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./config.yaml:/app/config.yaml
+      - .env:/app/.env
+
+    devices:
+      # Access to camera device
+      - /dev/video0:/dev/video0
+
+    # For GPU support (uncomment if using NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+    networks:
+      - ppe-network
+
+networks:
+  ppe-network:
+    driver: bridge
