@@ -15,6 +15,7 @@ from utils.logger import setup_logger
 from utils.model_downloader import ModelDownloader
 from models.model_config import ModelConfig
 from core.pose_based_detector import PoseBasedDetector
+from core.fusion_detector import FusionDetector
 from gui.main_window import MainWindow
 
 
@@ -146,16 +147,51 @@ def main():
     # Create main window
     window = MainWindow(config)
 
-    # Initialize detector
+    # Initialize detector (single or fusion based on config)
     try:
-        detector = PoseBasedDetector(
-            pose_model_path=config["models"]["yolov8_pose"]["path"],
-            ppe_model_path=config["models"]["ppe_detection"]["path"],
-            config=config,
-        )
+        multi_camera_enabled = config.get("multi_camera", {}).get("enabled", False)
 
-        # Set detector to camera widget
-        window.camera_widget.set_detector(detector)
+        if multi_camera_enabled:
+            # Multi-camera fusion detector
+            num_cameras = config.get("multi_camera", {}).get("num_cameras", 2)
+            logger.info(f"🎥 Initializing {num_cameras}-camera fusion detector...")
+
+            detector = FusionDetector(
+                pose_model_path=config["models"]["yolov8_pose"]["path"],
+                ppe_model_path=config["models"]["ppe_detection"]["path"],
+                config=config,
+                num_cameras=num_cameras,
+            )
+        else:
+            # Single camera detector
+            logger.info("📹 Initializing single camera detector...")
+
+            detector = PoseBasedDetector(
+                pose_model_path=config["models"]["yolov8_pose"]["path"],
+                ppe_model_path=config["models"]["ppe_detection"]["path"],
+                config=config,
+            )
+
+        # Set detector to window (which will set to camera widget)
+        window.set_detector(detector)
+
+        # Apply detection configuration if available
+        if "detection_config" in config:
+            det_config = config["detection_config"]
+
+            if "keypoints" in det_config:
+                enabled_keypoints = det_config["keypoints"].get("enabled_keypoints", [])
+                if enabled_keypoints:
+                    detector.set_enabled_keypoints(enabled_keypoints)
+
+            if "ppe_classes" in det_config:
+                enabled_classes = det_config["ppe_classes"].get("enabled_classes", [])
+                required_classes = det_config["ppe_classes"].get("required_classes", [])
+
+                if enabled_classes:
+                    detector.set_enabled_ppe_classes(enabled_classes)
+                if required_classes:
+                    detector.set_required_ppe(required_classes)
 
         logger.info("✅ Detection system initialized successfully")
 
@@ -166,6 +202,8 @@ def main():
         print("  1. Make sure model files are in the correct location")
         print("  2. Check if CUDA is available (if use_gpu=True)")
         print("  3. Try setting use_gpu=False in config.yaml")
+        import traceback
+        traceback.print_exc()
         return
 
     # Auto-start camera if specified
