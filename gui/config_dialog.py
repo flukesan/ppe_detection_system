@@ -51,7 +51,9 @@ class ConfigDialog(QDialog):
         self.tabs.addTab(self.keypoint_widget, "🦴 จุดร่างกาย")
 
         # PPE class configuration tab
-        self.ppe_class_widget = PPEClassConfigWidget()
+        # Extract custom PPE classes from config if available
+        custom_ppe = self.config.get("ppe_classes", {}).get("custom_ppe_classes", {})
+        self.ppe_class_widget = PPEClassConfigWidget(custom_ppe_classes=custom_ppe)
         self.tabs.addTab(self.ppe_class_widget, "🦺 อุปกรณ์ PPE")
 
         layout.addWidget(self.tabs)
