@@ -3,20 +3,24 @@ Model downloader utility for downloading pre-trained models.
 """
 
 import os
-import requests
-from tqdm import tqdm
 from typing import Optional
 
 
 class ModelDownloader:
     """
-    Utility for downloading model weights.
+    Utility for managing model downloads.
+
+    Note: YOLOv8-Pose models are automatically downloaded by Ultralytics
+    when first used. This utility helps document available models.
     """
 
-    # Model URLs (example - replace with actual URLs)
-    MODEL_URLS = {
-        "yolov9c-pose": "https://github.com/WongKinYiu/yolov9/releases/download/v0.1/yolov9-c-pose-converted.pt",
-        "ppe_detection": "https://example.com/ppe_detection_best.pt",  # Replace with actual URL
+    # Available YOLO Pose models (auto-downloaded by Ultralytics)
+    YOLO_POSE_MODELS = {
+        "yolov8n-pose.pt": "Nano - Fastest, least accurate",
+        "yolov8s-pose.pt": "Small - Good balance",
+        "yolov8m-pose.pt": "Medium - Recommended",
+        "yolov8l-pose.pt": "Large - High accuracy",
+        "yolov8x-pose.pt": "Extra Large - Best accuracy",
     }
 
     def __init__(self, models_dir: str = "models"):
@@ -29,102 +33,128 @@ class ModelDownloader:
         self.models_dir = models_dir
         os.makedirs(models_dir, exist_ok=True)
 
-    def download_model(
-        self,
-        model_name: str,
-        url: Optional[str] = None,
-        force: bool = False,
-    ) -> Optional[str]:
+    def print_info(self):
         """
-        Download a model.
+        Print information about available models.
+        """
+        print("\n" + "=" * 70)
+        print("📦 PPE Detection System - Model Information")
+        print("=" * 70)
 
-        Args:
-            model_name: Model name (key in MODEL_URLS or custom name)
-            url: Custom URL (if not in MODEL_URLS)
-            force: Force re-download even if file exists
+        print("\n🎯 YOLOv8-Pose Models (Auto-downloaded by Ultralytics):")
+        print("-" * 70)
+        for model, desc in self.YOLO_POSE_MODELS.items():
+            print(f"  • {model:20} - {desc}")
+
+        print("\n💡 How to use:")
+        print("  1. Models are automatically downloaded on first use")
+        print("  2. Set model path in config.yaml:")
+        print("     models:")
+        print("       yolov8_pose:")
+        print("         path: \"yolov8m-pose.pt\"  # Will auto-download")
+
+        print("\n🛡️ PPE Detection Model:")
+        print("-" * 70)
+        print("  • Custom model required - must be trained on your PPE dataset")
+        print("  • Recommended: Train YOLOv8 on PPE classes:")
+        print("    - helmet, vest, gloves, boots, goggles, mask")
+        print("  • Place trained model at: models/ppe_detection_best.pt")
+
+        print("\n📚 Training Guide:")
+        print("  1. Prepare dataset with PPE annotations")
+        print("  2. Train using Ultralytics:")
+        print("     yolo detect train data=ppe.yaml model=yolov8m.pt epochs=100")
+        print("  3. Copy best.pt to models/ppe_detection_best.pt")
+
+        print("\n" + "=" * 70)
+
+    def check_ppe_model(self) -> bool:
+        """
+        Check if PPE detection model exists.
 
         Returns:
-            Path to downloaded model or None
+            True if model exists
         """
-        # Get URL
-        download_url = url or self.MODEL_URLS.get(model_name)
+        ppe_model_path = os.path.join(self.models_dir, "ppe_detection_best.pt")
+        return os.path.exists(ppe_model_path)
 
-        if not download_url:
-            print(f"❌ Unknown model: {model_name}")
-            print(f"Available models: {list(self.MODEL_URLS.keys())}")
-            return None
+    def create_model_config(self, model_size: str = "m") -> dict:
+        """
+        Create recommended model configuration.
 
-        # Determine filename
-        if model_name in self.MODEL_URLS:
-            filename = f"{model_name}.pt"
+        Args:
+            model_size: Model size (n/s/m/l/x)
+
+        Returns:
+            Configuration dictionary
+        """
+        valid_sizes = ["n", "s", "m", "l", "x"]
+        if model_size not in valid_sizes:
+            print(f"⚠️  Invalid model size: {model_size}")
+            print(f"   Valid sizes: {valid_sizes}")
+            model_size = "m"
+
+        return {
+            "yolov8_pose": {
+                "path": f"yolov8{model_size}-pose.pt",
+                "description": self.YOLO_POSE_MODELS.get(
+                    f"yolov8{model_size}-pose.pt",
+                    "YOLOv8 Pose model"
+                ),
+            },
+            "ppe_detection": {
+                "path": "models/ppe_detection_best.pt",
+                "description": "Custom PPE detection model",
+                "status": "✅ Found" if self.check_ppe_model() else "❌ Not found - must be trained",
+            },
+        }
+
+    def get_recommended_model(self, gpu_available: bool = True) -> str:
+        """
+        Get recommended model based on hardware.
+
+        Args:
+            gpu_available: Whether GPU is available
+
+        Returns:
+            Recommended model name
+        """
+        if gpu_available:
+            return "yolov8m-pose.pt"  # Medium - good balance
         else:
-            filename = os.path.basename(download_url)
+            return "yolov8n-pose.pt"  # Nano - fastest for CPU
 
-        output_path = os.path.join(self.models_dir, filename)
+    def setup_models(self):
+        """
+        Interactive setup for models.
+        """
+        print("\n🚀 Model Setup Wizard")
+        print("=" * 70)
 
-        # Check if already exists
-        if os.path.exists(output_path) and not force:
-            print(f"✅ Model already exists: {output_path}")
-            return output_path
-
-        print(f"📥 Downloading {model_name} from {download_url}...")
-
+        # Check GPU
         try:
-            response = requests.get(download_url, stream=True)
-            response.raise_for_status()
+            import torch
+            gpu_available = torch.cuda.is_available()
+            if gpu_available:
+                print("✅ GPU detected - Recommending YOLOv8m-pose")
+            else:
+                print("⚠️  No GPU detected - Recommending YOLOv8n-pose")
+        except:
+            gpu_available = False
+            print("⚠️  PyTorch not installed - Cannot detect GPU")
 
-            total_size = int(response.headers.get('content-length', 0))
+        recommended = self.get_recommended_model(gpu_available)
+        print(f"\n📋 Recommended model: {recommended}")
 
-            with open(output_path, 'wb') as f:
-                with tqdm(total=total_size, unit='B', unit_scale=True) as pbar:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                        pbar.update(len(chunk))
+        # Check PPE model
+        print("\n🛡️ Checking PPE Detection Model...")
+        if self.check_ppe_model():
+            print("✅ PPE detection model found!")
+        else:
+            print("❌ PPE detection model NOT found")
+            print("\n⚠️  You need to provide a trained PPE detection model:")
+            print("   1. Train your own model on PPE dataset")
+            print("   2. Place it at: models/ppe_detection_best.pt")
+            print("   3. Or update config.yaml with your model path")
 
-            print(f"✅ Downloaded: {output_path}")
-            return output_path
-
-        except Exception as e:
-            print(f"❌ Download failed: {e}")
-            if os.path.exists(output_path):
-                os.remove(output_path)
-            return None
-
-    def download_all(self, force: bool = False):
-        """
-        Download all available models.
-
-        Args:
-            force: Force re-download
-        """
-        print("📥 Downloading all models...")
-
-        for model_name in self.MODEL_URLS.keys():
-            self.download_model(model_name, force=force)
-
-        print("✅ All models downloaded!")
-
-    def list_models(self) -> list:
-        """
-        List available models for download.
-
-        Returns:
-            List of model names
-        """
-        return list(self.MODEL_URLS.keys())
-
-    def check_models(self) -> dict:
-        """
-        Check which models are downloaded.
-
-        Returns:
-            Dictionary of model status
-        """
-        status = {}
-
-        for model_name in self.MODEL_URLS.keys():
-            filename = f"{model_name}.pt"
-            path = os.path.join(self.models_dir, filename)
-            status[model_name] = os.path.exists(path)
-
-        return status
+        print("\n" + "=" * 70)

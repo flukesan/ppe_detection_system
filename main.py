@@ -30,38 +30,32 @@ def check_models(config):
     """
     print("\n🔍 Checking models...")
 
-    pose_model_path = config["models"]["yolov9_pose"]["path"]
+    pose_model_path = config["models"]["yolov8_pose"]["path"]
     ppe_model_path = config["models"]["ppe_detection"]["path"]
 
-    pose_exists = os.path.exists(pose_model_path)
-    ppe_exists = os.path.exists(ppe_model_path)
+    # YOLOv8-Pose will be auto-downloaded by Ultralytics
+    print(f"✅ Pose Model: {pose_model_path} (auto-downloaded by Ultralytics)")
 
-    print(f"{'✅' if pose_exists else '❌'} Pose Model: {pose_model_path}")
+    ppe_exists = os.path.exists(ppe_model_path)
     print(f"{'✅' if ppe_exists else '❌'} PPE Model: {ppe_model_path}")
 
-    if not pose_exists or not ppe_exists:
-        print("\n⚠️  Some models are missing!")
-        print("You can download models using:")
-        print("  python main.py --download-models")
+    if not ppe_exists:
+        print("\n⚠️  PPE detection model is missing!")
+        print("You need to:")
+        print("  1. Train a YOLOv8 model on your PPE dataset")
+        print("  2. Place the trained model at: models/ppe_detection_best.pt")
+        print("\nFor model information, run:")
+        print("  python main.py --model-info")
         return False
 
     return True
 
 
-def download_models():
-    """Download required models."""
-    print("\n📥 Downloading models...\n")
-
+def show_model_info():
+    """Show model information."""
     downloader = ModelDownloader()
-
-    # Download YOLOv9-Pose
-    print("Downloading YOLOv9-Pose model...")
-    downloader.download_model("yolov9c-pose")
-
-    print("\n⚠️  Note: PPE detection model must be trained and placed in models/")
-    print("   You can train your own model or obtain a pre-trained one.")
-
-    print("\n✅ Download complete!")
+    downloader.print_info()
+    downloader.setup_models()
 
 
 def main():
@@ -76,9 +70,9 @@ def main():
     )
 
     parser.add_argument(
-        "--download-models",
+        "--model-info",
         action="store_true",
-        help="Download required models"
+        help="Show model information and setup guide"
     )
 
     parser.add_argument(
@@ -109,9 +103,9 @@ def main():
 
     args = parser.parse_args()
 
-    # Download models if requested
-    if args.download_models:
-        download_models()
+    # Show model info if requested
+    if args.model_info:
+        show_model_info()
         return
 
     # Load configuration
@@ -155,7 +149,7 @@ def main():
     # Initialize detector
     try:
         detector = PoseBasedDetector(
-            pose_model_path=config["models"]["yolov9_pose"]["path"],
+            pose_model_path=config["models"]["yolov8_pose"]["path"],
             ppe_model_path=config["models"]["ppe_detection"]["path"],
             config=config,
         )

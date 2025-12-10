@@ -45,13 +45,13 @@ temporal_filter:
   violation_threshold: 0.7
 
 models:
-  yolov9_pose:
-    path: "models/yolov9c-pose.pt"
+  yolov8_pose:
+    path: "yolov8m-pose.pt"  # Auto-downloaded by Ultralytics (n/s/m/l/x)
     input_size: 640
     device: "cuda:0"
 
   ppe_detection:
-    path: "models/ppe_detection_best.pt"
+    path: "models/ppe_detection_best.pt"  # Must be trained separately
     input_size: 640
     device: "cuda:0"
 
