@@ -59,12 +59,12 @@ class ConfigLoader:
             use_gpu = os.getenv("USE_GPU").lower() == "true"
             self.config["detection"]["use_gpu"] = use_gpu
             device = "cuda:0" if use_gpu else "cpu"
-            self.config["models"]["yolov9_pose"]["device"] = device
+            self.config["models"]["yolov8_pose"]["device"] = device
             self.config["models"]["ppe_detection"]["device"] = device
 
         # Model paths
-        if os.getenv("YOLOV9_POSE_MODEL"):
-            self.config["models"]["yolov9_pose"]["path"] = os.getenv("YOLOV9_POSE_MODEL")
+        if os.getenv("YOLOV8_POSE_MODEL"):
+            self.config["models"]["yolov8_pose"]["path"] = os.getenv("YOLOV8_POSE_MODEL")
 
         if os.getenv("PPE_DETECTION_MODEL"):
             self.config["models"]["ppe_detection"]["path"] = os.getenv("PPE_DETECTION_MODEL")
