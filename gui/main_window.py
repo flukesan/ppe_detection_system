@@ -10,6 +10,11 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
 from typing import Dict, Any, Optional
 import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.detection_config_manager import DetectionConfigManager
 
 from .camera_widget import CameraWidget
 from .control_panel import ControlPanel
@@ -33,6 +38,15 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.config = config
+
+        # Initialize detection config manager
+        self.detection_config_manager = DetectionConfigManager()
+
+        # Load saved detection configuration
+        saved_detection_config = self.detection_config_manager.get_config()
+        if "detection_config" not in self.config:
+            self.config["detection_config"] = saved_detection_config
+
         self.setup_ui()
         self.setup_menu()
         self.setup_status_bar()
@@ -283,26 +297,17 @@ class MainWindow(QMainWindow):
 
     def on_configure_ppe(self):
         """Open PPE configuration dialog."""
-        # Initialize config if not exists
-        if "detection_config" not in self.config:
-            self.config["detection_config"] = {
-                "keypoints": {
-                    "enabled_keypoints": list(range(17)),  # All keypoints
-                    "show_all": True,
-                },
-                "ppe_classes": {
-                    "enabled_classes": ["helmet", "vest", "gloves", "boots", "goggles", "mask"],
-                    "required_classes": ["helmet", "vest"],
-                },
-            }
+        # Load current detection config (from saved file or default)
+        current_config = self.config.get("detection_config",
+                                        self.detection_config_manager.get_config())
 
-        # Create and show dialog
-        dialog = ConfigDialog(self, self.config.get("detection_config", {}))
+        # Create and show dialog with current config
+        dialog = ConfigDialog(self, current_config)
         dialog.config_applied.connect(self.on_detection_config_changed)
 
         if dialog.exec():
             # Configuration was accepted
-            self.status_bar.showMessage("ตั้งค่าการตรวจจับเรียบร้อย")
+            self.status_bar.showMessage("✅ ตั้งค่าการตรวจจับเรียบร้อย (บันทึกแล้ว)")
 
     def on_detection_config_changed(self, config: Dict[str, Any]):
         """
@@ -311,8 +316,12 @@ class MainWindow(QMainWindow):
         Args:
             config: New configuration
         """
-        # Update config
+        # Update in-memory config
         self.config["detection_config"] = config
+
+        # Save to file for persistence
+        if self.detection_config_manager.update_config(config):
+            print("✅ Detection config saved to file")
 
         # Apply to camera widget/detector
         if hasattr(self.camera_widget, 'detector') and self.camera_widget.detector:
@@ -328,10 +337,12 @@ class MainWindow(QMainWindow):
             self.camera_widget.detector.set_enabled_ppe_classes(enabled_classes)
             self.camera_widget.detector.set_required_ppe(required_classes)
 
-            print(f"✅ Updated detection config:")
+            print(f"✅ Applied detection config:")
             print(f"   Enabled keypoints: {len(enabled_keypoints)}/17")
             print(f"   Enabled PPE: {enabled_classes}")
             print(f"   Required PPE: {required_classes}")
+        else:
+            print("ℹ️ Config saved - will be applied when detector is initialized")
 
     def on_about(self):
         """Show about dialog."""
