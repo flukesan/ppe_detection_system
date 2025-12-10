@@ -16,8 +16,10 @@ class ControlPanel(QWidget):
     """
 
     # Signals
-    start_requested = pyqtSignal(int)  # Emits camera ID
-    stop_requested = pyqtSignal()
+    start_requested = pyqtSignal(int)  # Emits camera ID (deprecated, for compatibility)
+    stop_requested = pyqtSignal()  # Deprecated, for compatibility
+    detection_start_requested = pyqtSignal()  # New: Start detection only
+    detection_stop_requested = pyqtSignal()  # New: Stop detection only
     settings_changed = pyqtSignal(dict)
 
     def __init__(self, config: Dict[str, Any]):
@@ -45,6 +47,18 @@ class ControlPanel(QWidget):
         # Start/Stop button
         self.start_stop_btn = QPushButton("▶ Start Detection")
         self.start_stop_btn.clicked.connect(self.on_start_stop_clicked)
+        self.start_stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
         camera_layout.addWidget(self.start_stop_btn)
 
         # Camera selection
@@ -114,16 +128,56 @@ class ControlPanel(QWidget):
     def on_start_stop_clicked(self):
         """Handle start/stop button click."""
         if not self.is_running:
-            # Start detection
-            camera_id = self.camera_combo.currentIndex()
-            self.start_requested.emit(camera_id)
-            self.start_stop_btn.setText("⏸ Stop Detection")
+            # Start detection (camera must already be connected)
+            self.detection_start_requested.emit()
+            self.start_stop_btn.setText("⏹ Stop Detection")
+            self.start_stop_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #dc3545;
+                    color: white;
+                    font-weight: bold;
+                    padding: 10px;
+                    border-radius: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #c82333;
+                }
+            """)
             self.is_running = True
         else:
-            # Stop detection
-            self.stop_requested.emit()
+            # Stop detection (camera keeps running)
+            self.detection_stop_requested.emit()
             self.start_stop_btn.setText("▶ Start Detection")
+            self.start_stop_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #28a745;
+                    color: white;
+                    font-weight: bold;
+                    padding: 10px;
+                    border-radius: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #218838;
+                }
+            """)
             self.is_running = False
+
+    def reset_state(self):
+        """Reset control panel to initial state."""
+        self.is_running = False
+        self.start_stop_btn.setText("▶ Start Detection")
+        self.start_stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
 
     def on_settings_changed(self):
         """Handle settings changes."""

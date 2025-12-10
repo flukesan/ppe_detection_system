@@ -166,8 +166,8 @@ class MainWindow(QMainWindow):
         self.camera_widget.status_changed.connect(self.on_status_changed)
 
         # Control panel signals
-        self.control_panel.start_requested.connect(self.camera_widget.start_camera)
-        self.control_panel.stop_requested.connect(self.camera_widget.stop_camera)
+        self.control_panel.detection_start_requested.connect(self.camera_widget.start_detection)
+        self.control_panel.detection_stop_requested.connect(self.camera_widget.stop_detection)
         self.control_panel.settings_changed.connect(self.on_settings_changed)
 
     def on_frame_processed(self, results: Dict[str, Any]):
@@ -266,6 +266,7 @@ class MainWindow(QMainWindow):
         """Disconnect current camera."""
         if self.camera_widget.is_running:
             self.camera_widget.stop_camera()
+            self.control_panel.reset_state()  # Reset detection button
             self.status_bar.showMessage("ตัดการเชื่อมต่อกล้องแล้ว")
         else:
             self.status_bar.showMessage("ไม่มีกล้องที่เชื่อมต่ออยู่")
