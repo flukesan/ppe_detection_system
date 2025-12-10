@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.detection_config_manager import DetectionConfigManager
 
 from .camera_widget import CameraWidget
+from .multi_camera_widget import MultiCameraWidget
 from .control_panel import ControlPanel
 from .stats_widget import StatsWidget
 from .alert_widget import AlertWidget
@@ -47,10 +48,27 @@ class MainWindow(QMainWindow):
         if "detection_config" not in self.config:
             self.config["detection_config"] = saved_detection_config
 
+        # Check if multi-camera mode is enabled
+        self.multi_camera_enabled = self.config.get("multi_camera", {}).get("enabled", False)
+        self.camera_widget = None  # Will be set in setup_ui
+        self.left_panel = None  # Store reference for rebuild
+        self.detector = None  # Current detector instance
+
         self.setup_ui()
         self.setup_menu()
         self.setup_status_bar()
         self.apply_theme()
+
+    def set_detector(self, detector):
+        """
+        Set the detector instance.
+
+        Args:
+            detector: PoseBasedDetector or FusionDetector instance
+        """
+        self.detector = detector
+        if self.camera_widget:
+            self.camera_widget.set_detector(detector)
 
     def setup_ui(self):
         """Setup the user interface."""
@@ -70,19 +88,24 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left panel: Camera view and alerts
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
+        self.left_panel = QWidget()
+        left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Camera widget
-        self.camera_widget = CameraWidget(self.config)
+        # Camera widget (single or multi-camera based on config)
+        if self.multi_camera_enabled:
+            num_cameras = self.config.get("multi_camera", {}).get("num_cameras", 2)
+            self.camera_widget = MultiCameraWidget(self.config, num_cameras)
+        else:
+            self.camera_widget = CameraWidget(self.config)
+
         left_layout.addWidget(self.camera_widget, stretch=3)
 
         # Alert widget
         self.alert_widget = AlertWidget(self.config)
         left_layout.addWidget(self.alert_widget, stretch=1)
 
-        splitter.addWidget(left_panel)
+        splitter.addWidget(self.left_panel)
 
         # Right panel: Controls and statistics
         right_panel = QWidget()
@@ -146,6 +169,14 @@ class MainWindow(QMainWindow):
         connect_camera_action.setShortcut("Ctrl+K")
         connect_camera_action.triggered.connect(self.on_connect_camera)
         camera_menu.addAction(connect_camera_action)
+
+        camera_menu.addSeparator()
+
+        # Multi-camera mode toggle
+        self.multi_camera_action = QAction("🎥 &Multi-Camera Fusion Mode", self, checkable=True)
+        self.multi_camera_action.setChecked(self.multi_camera_enabled)
+        self.multi_camera_action.triggered.connect(self.on_toggle_multi_camera)
+        camera_menu.addAction(self.multi_camera_action)
 
         camera_menu.addSeparator()
 
@@ -236,17 +267,22 @@ class MainWindow(QMainWindow):
 
     def on_connect_camera(self):
         """Open camera connection dialog."""
-        from .camera_connection_dialog import CameraConnectionDialog
+        if self.multi_camera_enabled:
+            # Multi-camera mode: connect to configured cameras
+            self.connect_multi_cameras()
+        else:
+            # Single camera mode: show connection dialog
+            from .camera_connection_dialog import CameraConnectionDialog
 
-        # Get current camera config if exists
-        current_config = getattr(self, 'camera_config', None)
+            # Get current camera config if exists
+            current_config = getattr(self, 'camera_config', None)
 
-        # Create and show dialog
-        dialog = CameraConnectionDialog(self, current_config)
-        dialog.camera_selected.connect(self.on_camera_selected)
+            # Create and show dialog
+            dialog = CameraConnectionDialog(self, current_config)
+            dialog.camera_selected.connect(self.on_camera_selected)
 
-        if dialog.exec():
-            pass  # Connection handled by signal
+            if dialog.exec():
+                pass  # Connection handled by signal
 
     def on_camera_selected(self, config: Dict[str, Any]):
         """
@@ -276,14 +312,141 @@ class MainWindow(QMainWindow):
         source_type = config["type"].upper()
         self.status_bar.showMessage(f"เชื่อมต่อ {source_type} camera สำเร็จ")
 
+    def connect_multi_cameras(self):
+        """Connect multiple cameras for fusion mode."""
+        multi_cam_config = self.config.get("multi_camera", {})
+        camera_sources = multi_cam_config.get("camera_sources", [0, 1])
+        camera_configs = multi_cam_config.get("camera_configs", None)
+
+        if isinstance(self.camera_widget, MultiCameraWidget):
+            self.camera_widget.start_cameras(camera_sources, camera_configs)
+        else:
+            self.status_bar.showMessage("⚠️ Not in multi-camera mode")
+
     def on_disconnect_camera(self):
-        """Disconnect current camera."""
+        """Disconnect current camera(s)."""
         if self.camera_widget.is_running:
-            self.camera_widget.stop_camera()
+            if self.multi_camera_enabled:
+                self.camera_widget.stop_cameras()
+            else:
+                self.camera_widget.stop_camera()
+
             self.control_panel.reset_state()  # Reset detection button
             self.status_bar.showMessage("ตัดการเชื่อมต่อกล้องแล้ว")
         else:
             self.status_bar.showMessage("ไม่มีกล้องที่เชื่อมต่ออยู่")
+
+    def on_toggle_multi_camera(self, checked: bool):
+        """
+        Toggle between single and multi-camera mode.
+
+        Args:
+            checked: True if multi-camera mode enabled
+        """
+        from PyQt6.QtWidgets import QMessageBox
+
+        if self.camera_widget.is_running:
+            QMessageBox.warning(
+                self,
+                "Cannot Switch Mode",
+                "Please disconnect all cameras before switching modes."
+            )
+            # Revert checkbox
+            self.multi_camera_action.setChecked(not checked)
+            return
+
+        # Update config
+        self.multi_camera_enabled = checked
+        self.config.setdefault("multi_camera", {})["enabled"] = checked
+
+        # Rebuild camera widget
+        self._rebuild_camera_widget()
+
+        # Update status
+        mode_name = "Multi-Camera Fusion" if checked else "Single Camera"
+        self.status_bar.showMessage(f"✅ Switched to {mode_name} mode")
+
+    def _rebuild_camera_widget(self):
+        """Rebuild camera widget and detector for new mode."""
+        from core.pose_based_detector import PoseBasedDetector
+        from core.fusion_detector import FusionDetector
+
+        # Disconnect old signals
+        self.camera_widget.frame_processed.disconnect(self.on_frame_processed)
+        self.camera_widget.status_changed.disconnect(self.on_status_changed)
+
+        # Remove old widget
+        layout = self.left_panel.layout()
+        layout.removeWidget(self.camera_widget)
+        self.camera_widget.deleteLater()
+
+        # Delete old detector (free memory)
+        self.detector = None
+
+        # Create new widget
+        if self.multi_camera_enabled:
+            num_cameras = self.config.get("multi_camera", {}).get("num_cameras", 2)
+            self.camera_widget = MultiCameraWidget(self.config, num_cameras)
+
+            # Create fusion detector
+            try:
+                self.detector = FusionDetector(
+                    pose_model_path=self.config["models"]["yolov8_pose"]["path"],
+                    ppe_model_path=self.config["models"]["ppe_detection"]["path"],
+                    config=self.config,
+                    num_cameras=num_cameras,
+                )
+            except Exception as e:
+                print(f"Error creating fusion detector: {e}")
+                self.detector = None
+        else:
+            self.camera_widget = CameraWidget(self.config)
+
+            # Create single detector
+            try:
+                self.detector = PoseBasedDetector(
+                    pose_model_path=self.config["models"]["yolov8_pose"]["path"],
+                    ppe_model_path=self.config["models"]["ppe_detection"]["path"],
+                    config=self.config,
+                )
+            except Exception as e:
+                print(f"Error creating detector: {e}")
+                self.detector = None
+
+        # Set detector to widget
+        if self.detector:
+            self.camera_widget.set_detector(self.detector)
+
+            # Apply detection configuration
+            if "detection_config" in self.config:
+                det_config = self.config["detection_config"]
+
+                if "keypoints" in det_config:
+                    enabled_keypoints = det_config["keypoints"].get("enabled_keypoints", [])
+                    if enabled_keypoints:
+                        self.detector.set_enabled_keypoints(enabled_keypoints)
+
+                if "ppe_classes" in det_config:
+                    enabled_classes = det_config["ppe_classes"].get("enabled_classes", [])
+                    required_classes = det_config["ppe_classes"].get("required_classes", [])
+
+                    if enabled_classes:
+                        self.detector.set_enabled_ppe_classes(enabled_classes)
+                    if required_classes:
+                        self.detector.set_required_ppe(required_classes)
+
+        # Add new widget
+        layout.insertWidget(0, self.camera_widget, stretch=3)
+
+        # Reconnect signals
+        self.camera_widget.frame_processed.connect(self.on_frame_processed)
+        self.camera_widget.status_changed.connect(self.on_status_changed)
+
+        # Reconnect control panel signals
+        self.control_panel.detection_start_requested.disconnect()
+        self.control_panel.detection_stop_requested.disconnect()
+        self.control_panel.detection_start_requested.connect(self.camera_widget.start_detection)
+        self.control_panel.detection_stop_requested.connect(self.camera_widget.stop_detection)
 
     def on_toggle_pose_keypoints(self, checked: bool):
         """Toggle pose keypoints display."""
