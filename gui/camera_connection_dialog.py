@@ -1,20 +1,27 @@
 """
-Camera connection configuration dialog for USB and RTSP sources.
+Camera connection configuration dialog for USB and RTSP sources with save/load capability.
 """
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
     QRadioButton, QLabel, QLineEdit, QSpinBox,
-    QPushButton, QComboBox, QFormLayout, QMessageBox
+    QPushButton, QComboBox, QFormLayout, QMessageBox,
+    QListWidget, QListWidgetItem, QSplitter, QInputDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import cv2
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.camera_config_manager import CameraConfigManager
 
 
 class CameraConnectionDialog(QDialog):
     """
-    Dialog for configuring camera connection (USB or RTSP).
+    Dialog for configuring camera connection (USB or RTSP) with save/load.
     """
 
     # Signal emitted when camera source is selected
@@ -30,23 +37,98 @@ class CameraConnectionDialog(QDialog):
         """
         super().__init__(parent)
         self.current_config = current_config or {}
+        self.config_manager = CameraConfigManager()
         self.setup_ui()
-        self.load_config()
+        self.refresh_saved_cameras()
 
     def setup_ui(self):
         """Setup the user interface."""
         self.setWindowTitle("ตั้งค่าการเชื่อมต่อกล้อง")
         self.setModal(True)
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(800)
+        self.setMinimumHeight(600)
 
-        layout = QVBoxLayout(self)
+        main_layout = QHBoxLayout(self)
 
-        # Title
-        title_label = QLabel("เลือกประเภทกล้อง")
-        title_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        layout.addWidget(title_label)
+        # Create splitter for saved cameras list and settings
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # Left side: Saved cameras list
+        left_widget = self.create_saved_cameras_panel()
+        splitter.addWidget(left_widget)
+
+        # Right side: Camera settings
+        right_widget = self.create_camera_settings_panel()
+        splitter.addWidget(right_widget)
+
+        # Set splitter sizes (30% left, 70% right)
+        splitter.setSizes([250, 550])
+
+        main_layout.addWidget(splitter)
+
+    def create_saved_cameras_panel(self):
+        """Create saved cameras list panel."""
+        widget = QGroupBox("กล้องที่บันทึกไว้")
+        layout = QVBoxLayout()
+
+        # Saved cameras list
+        self.saved_cameras_list = QListWidget()
+        self.saved_cameras_list.itemClicked.connect(self.on_camera_item_clicked)
+        self.saved_cameras_list.itemDoubleClicked.connect(self.on_camera_item_double_clicked)
+        layout.addWidget(self.saved_cameras_list)
+
+        # Buttons for saved cameras
+        btn_layout = QVBoxLayout()
+
+        load_btn = QPushButton("📥 โหลด")
+        load_btn.clicked.connect(self.load_selected_camera)
+        btn_layout.addWidget(load_btn)
+
+        delete_btn = QPushButton("🗑️ ลบ")
+        delete_btn.clicked.connect(self.delete_selected_camera)
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 6px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        btn_layout.addWidget(delete_btn)
+
+        btn_layout.addStretch()
+
+        layout.addLayout(btn_layout)
+
+        # Info label
+        info_label = QLabel("💡 ดับเบิ้ลคลิกเพื่อโหลดค่า")
+        info_label.setStyleSheet("color: #888; font-size: 9px;")
+        layout.addWidget(info_label)
+
+        widget.setLayout(layout)
+        return widget
+
+    def create_camera_settings_panel(self):
+        """Create camera settings panel."""
+        widget = QGroupBox("ตั้งค่ากล้อง")
+        layout = QVBoxLayout()
+
+        # Camera name
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("ชื่อกล้อง:"))
+        self.camera_name_input = QLineEdit()
+        self.camera_name_input.setPlaceholderText("เช่น: กล้องหน้าโรงงาน, CCTV ทางเข้า")
+        name_layout.addWidget(self.camera_name_input)
+        layout.addLayout(name_layout)
 
         # Camera type selection
+        type_group = QGroupBox("ประเภทกล้อง")
+        type_layout = QVBoxLayout()
+
         self.usb_radio = QRadioButton("📹 USB Camera (กล้องเชื่อมต่อผ่าน USB)")
         self.rtsp_radio = QRadioButton("🌐 RTSP Camera (กล้อง IP/Network)")
         self.file_radio = QRadioButton("📁 Video File (ไฟล์วิดีโอ)")
@@ -56,9 +138,11 @@ class CameraConnectionDialog(QDialog):
         self.rtsp_radio.toggled.connect(self.on_type_changed)
         self.file_radio.toggled.connect(self.on_type_changed)
 
-        layout.addWidget(self.usb_radio)
-        layout.addWidget(self.rtsp_radio)
-        layout.addWidget(self.file_radio)
+        type_layout.addWidget(self.usb_radio)
+        type_layout.addWidget(self.rtsp_radio)
+        type_layout.addWidget(self.file_radio)
+        type_group.setLayout(type_layout)
+        layout.addWidget(type_group)
 
         # USB Camera settings
         self.usb_group = QGroupBox("USB Camera Settings")
@@ -83,12 +167,10 @@ class CameraConnectionDialog(QDialog):
         self.rtsp_url_input.setPlaceholderText("rtsp://username:password@192.168.1.100:554/stream")
         rtsp_layout.addRow("RTSP URL:", self.rtsp_url_input)
 
-        # Common RTSP examples
         examples = QLabel(
             "ตัวอย่าง:\n"
             "• rtsp://admin:12345@192.168.1.100:554/stream1\n"
-            "• rtsp://192.168.1.100:8554/live\n"
-            "• rtsp://camera.local/h264"
+            "• rtsp://192.168.1.100:8554/live"
         )
         examples.setStyleSheet("color: #888; font-size: 9px;")
         rtsp_layout.addRow("", examples)
@@ -126,8 +208,8 @@ class CameraConnectionDialog(QDialog):
         self.file_group.setVisible(False)
         layout.addWidget(self.file_group)
 
-        # Camera properties (common for all types)
-        props_group = QGroupBox("Camera Properties (ตั้งค่ากล้อง)")
+        # Camera properties
+        props_group = QGroupBox("Camera Properties")
         props_layout = QFormLayout()
 
         self.width_spinbox = QSpinBox()
@@ -150,8 +232,25 @@ class CameraConnectionDialog(QDialog):
         props_group.setLayout(props_layout)
         layout.addWidget(props_group)
 
-        # Buttons
+        # Action buttons
         button_layout = QHBoxLayout()
+
+        save_btn = QPushButton("💾 บันทึกกล้อง")
+        save_btn.clicked.connect(self.save_current_camera)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+        """)
+        button_layout.addWidget(save_btn)
 
         connect_btn = QPushButton("✅ เชื่อมต่อ")
         connect_btn.clicked.connect(self.connect_camera)
@@ -175,6 +274,9 @@ class CameraConnectionDialog(QDialog):
         button_layout.addWidget(cancel_btn)
 
         layout.addLayout(button_layout)
+
+        widget.setLayout(layout)
+        return widget
 
     def refresh_usb_cameras(self):
         """Scan and list available USB cameras."""
@@ -208,8 +310,10 @@ class CameraConnectionDialog(QDialog):
             QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณากรอก RTSP URL")
             return
 
-        # Try to connect
-        QMessageBox.information(self, "กำลังทดสอบ", f"กำลังเชื่อมต่อไปยัง:\n{url}\n\nกรุณารอสักครู่...")
+        QMessageBox.information(
+            self, "กำลังทดสอบ",
+            f"กำลังเชื่อมต่อไปยัง:\n{url}\n\nกรุณารอสักครู่..."
+        )
 
         cap = cv2.VideoCapture(url)
         if cap.isOpened():
@@ -218,25 +322,20 @@ class CameraConnectionDialog(QDialog):
 
             if ret:
                 QMessageBox.information(
-                    self,
-                    "สำเร็จ",
+                    self, "สำเร็จ",
                     "✅ เชื่อมต่อกล้อง RTSP สำเร็จ!\nสามารถรับภาพได้"
                 )
             else:
                 QMessageBox.warning(
-                    self,
-                    "คำเตือน",
+                    self, "คำเตือน",
                     "⚠️ เชื่อมต่อได้แต่ไม่สามารถอ่านภาพ\nตรวจสอบ stream path"
                 )
         else:
             QMessageBox.critical(
-                self,
-                "ล้มเหลว",
-                "❌ ไม่สามารถเชื่อมต่อกล้อง RTSP\n\nกรุณาตรวจสอบ:\n"
-                "• URL ถูกต้อง\n"
-                "• กล้องออนไลน์\n"
-                "• Username/Password ถูกต้อง\n"
-                "• Network เชื่อมต่อได้"
+                self, "ล้มเหลว",
+                "❌ ไม่สามารถเชื่อมต่อกล้อง RTSP\n\n"
+                "กรุณาตรวจสอบ:\n• URL ถูกต้อง\n• กล้องออนไลน์\n"
+                "• Username/Password ถูกต้อง\n• Network เชื่อมต่อได้"
             )
 
     def browse_video_file(self):
@@ -244,9 +343,7 @@ class CameraConnectionDialog(QDialog):
         from PyQt6.QtWidgets import QFileDialog
 
         filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "เลือกไฟล์วิดีโอ",
-            "",
+            self, "เลือกไฟล์วิดีโอ", "",
             "Video Files (*.mp4 *.avi *.mov *.mkv *.flv);;All Files (*.*)"
         )
 
@@ -254,91 +351,179 @@ class CameraConnectionDialog(QDialog):
             self.file_path_input.setText(filename)
 
     def get_rtsp_url(self) -> str:
-        """
-        Build RTSP URL from inputs.
-
-        Returns:
-            Complete RTSP URL
-        """
+        """Build RTSP URL from inputs."""
         url = self.rtsp_url_input.text().strip()
 
         if not url:
             return ""
 
-        # If username and password are provided separately, inject them
         username = self.rtsp_username_input.text().strip()
         password = self.rtsp_password_input.text().strip()
 
         if username and password and "@" not in url:
-            # Insert credentials into URL
             if url.startswith("rtsp://"):
                 url = f"rtsp://{username}:{password}@{url[7:]}"
 
         return url
 
-    def load_config(self):
-        """Load configuration from current config."""
-        if not self.current_config:
-            return
+    def get_current_config(self) -> Dict[str, Any]:
+        """Get current camera configuration from form."""
+        config = {
+            "name": self.camera_name_input.text().strip() or "Unnamed Camera",
+            "width": self.width_spinbox.value(),
+            "height": self.height_spinbox.value(),
+            "fps": self.fps_spinbox.value(),
+        }
 
-        camera_type = self.current_config.get("type", "usb")
+        if self.usb_radio.isChecked():
+            camera_id = self.usb_combo.currentData()
+            config["type"] = "usb"
+            config["source"] = camera_id
+        elif self.rtsp_radio.isChecked():
+            url = self.get_rtsp_url()
+            config["type"] = "rtsp"
+            config["source"] = url
+        elif self.file_radio.isChecked():
+            filepath = self.file_path_input.text().strip()
+            config["type"] = "file"
+            config["source"] = filepath
+
+        return config
+
+    def load_camera_config(self, config: Dict[str, Any]):
+        """Load camera configuration into form."""
+        # Set camera name
+        self.camera_name_input.setText(config.get("name", ""))
+
+        # Set camera type
+        camera_type = config.get("type", "usb")
 
         if camera_type == "usb":
             self.usb_radio.setChecked(True)
-            camera_id = self.current_config.get("source", 0)
+            camera_id = config.get("source", 0)
             index = self.usb_combo.findData(camera_id)
             if index >= 0:
                 self.usb_combo.setCurrentIndex(index)
 
         elif camera_type == "rtsp":
             self.rtsp_radio.setChecked(True)
-            self.rtsp_url_input.setText(self.current_config.get("source", ""))
+            self.rtsp_url_input.setText(config.get("source", ""))
 
         elif camera_type == "file":
             self.file_radio.setChecked(True)
-            self.file_path_input.setText(self.current_config.get("source", ""))
+            self.file_path_input.setText(config.get("source", ""))
 
-        # Load properties
-        self.width_spinbox.setValue(self.current_config.get("width", 1280))
-        self.height_spinbox.setValue(self.current_config.get("height", 720))
-        self.fps_spinbox.setValue(self.current_config.get("fps", 30))
+        # Set properties
+        self.width_spinbox.setValue(config.get("width", 1280))
+        self.height_spinbox.setValue(config.get("height", 720))
+        self.fps_spinbox.setValue(config.get("fps", 30))
+
+    def refresh_saved_cameras(self):
+        """Refresh saved cameras list."""
+        self.saved_cameras_list.clear()
+
+        cameras = self.config_manager.get_all_cameras()
+        for name, config in cameras.items():
+            item = QListWidgetItem(f"📹 {name}")
+            item.setData(Qt.ItemDataRole.UserRole, name)
+
+            # Add camera type icon
+            cam_type = config.get("type", "usb").upper()
+            item.setText(f"{'📹' if cam_type == 'USB' else '🌐' if cam_type == 'RTSP' else '📁'} {name}")
+
+            self.saved_cameras_list.addItem(item)
+
+    def on_camera_item_clicked(self, item: QListWidgetItem):
+        """Handle camera item single click."""
+        pass  # Could add preview here
+
+    def on_camera_item_double_clicked(self, item: QListWidgetItem):
+        """Handle camera item double click - load configuration."""
+        self.load_selected_camera()
+
+    def load_selected_camera(self):
+        """Load selected camera configuration."""
+        current_item = self.saved_cameras_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "คำเตือน", "กรุณาเลือกกล้องที่ต้องการโหลด")
+            return
+
+        camera_name = current_item.data(Qt.ItemDataRole.UserRole)
+        config = self.config_manager.get_camera(camera_name)
+
+        if config:
+            self.load_camera_config(config)
+            self.statusBar().showMessage(f"โหลดค่าจาก '{camera_name}' เรียบร้อย") if hasattr(self, 'statusBar') else None
+
+    def delete_selected_camera(self):
+        """Delete selected camera configuration."""
+        current_item = self.saved_cameras_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "คำเตือน", "กรุณาเลือกกล้องที่ต้องการลบ")
+            return
+
+        camera_name = current_item.data(Qt.ItemDataRole.UserRole)
+
+        reply = QMessageBox.question(
+            self, "ยืนยันการลบ",
+            f"ต้องการลบกล้อง '{camera_name}' ใช่หรือไม่?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.config_manager.remove_camera(camera_name):
+                self.refresh_saved_cameras()
+                QMessageBox.information(self, "สำเร็จ", f"ลบกล้อง '{camera_name}' เรียบร้อยแล้ว")
+
+    def save_current_camera(self):
+        """Save current camera configuration."""
+        config = self.get_current_config()
+        camera_name = config["name"]
+
+        # Check if camera already exists
+        if self.config_manager.camera_exists(camera_name):
+            reply = QMessageBox.question(
+                self, "ยืนยันการเขียนทับ",
+                f"กล้อง '{camera_name}' มีอยู่แล้ว\nต้องการเขียนทับใช่หรือไม่?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        # Validate configuration
+        if config["type"] == "usb" and config["source"] == -1:
+            QMessageBox.warning(self, "ข้อผิดพลาด", "ไม่พบกล้อง USB")
+            return
+        elif config["type"] == "rtsp" and not config["source"]:
+            QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณากรอก RTSP URL")
+            return
+        elif config["type"] == "file" and not config["source"]:
+            QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณาเลือกไฟล์วิดีโอ")
+            return
+
+        # Save configuration
+        if self.config_manager.add_camera(camera_name, config):
+            self.refresh_saved_cameras()
+            QMessageBox.information(
+                self, "สำเร็จ",
+                f"บันทึกกล้อง '{camera_name}' เรียบร้อยแล้ว"
+            )
 
     def connect_camera(self):
-        """Connect to selected camera source."""
-        config = {}
+        """Connect to camera with current settings."""
+        config = self.get_current_config()
 
-        # Get camera type and source
-        if self.usb_radio.isChecked():
-            camera_id = self.usb_combo.currentData()
-            if camera_id == -1:
-                QMessageBox.warning(self, "ข้อผิดพลาด", "ไม่พบกล้อง USB")
-                return
-
-            config["type"] = "usb"
-            config["source"] = camera_id
-
-        elif self.rtsp_radio.isChecked():
-            url = self.get_rtsp_url()
-            if not url:
-                QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณากรอก RTSP URL")
-                return
-
-            config["type"] = "rtsp"
-            config["source"] = url
-
-        elif self.file_radio.isChecked():
-            filepath = self.file_path_input.text().strip()
-            if not filepath:
-                QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณาเลือกไฟล์วิดีโอ")
-                return
-
-            config["type"] = "file"
-            config["source"] = filepath
-
-        # Get camera properties
-        config["width"] = self.width_spinbox.value()
-        config["height"] = self.height_spinbox.value()
-        config["fps"] = self.fps_spinbox.value()
+        # Validate
+        if config["type"] == "usb" and config["source"] == -1:
+            QMessageBox.warning(self, "ข้อผิดพลาด", "ไม่พบกล้อง USB")
+            return
+        elif config["type"] == "rtsp" and not config["source"]:
+            QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณากรอก RTSP URL")
+            return
+        elif config["type"] == "file" and not config["source"]:
+            QMessageBox.warning(self, "ข้อผิดพลาด", "กรุณาเลือกไฟล์วิดีโอ")
+            return
 
         # Emit signal
         self.camera_selected.emit(config)
