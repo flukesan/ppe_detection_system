@@ -21,9 +21,9 @@ multi_camera:
 
   # Camera sources (can be int for USB, string for RTSP/file)
   camera_sources:
-    - 0  # Camera 1: USB camera 0
-    - 1  # Camera 2: USB camera 1
-    # Examples:
+    - 0  # Camera 1: USB camera 0 (CamNB_0)
+    - "rtsp://admin:wip50313@192.168.1.181:8554"  # Camera 2: RTSP camera
+    # Examples for other sources:
     # - "rtsp://192.168.1.100:554/stream"
     # - "/path/to/video.mp4"
 
