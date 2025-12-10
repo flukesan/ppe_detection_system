@@ -335,16 +335,22 @@ class PPEClassConfigWidget(QWidget):
             row_layout.addWidget(required_checkbox, stretch=1)
 
             # Delete button (only for custom PPE)
+            # Create a container widget for the delete button to prevent stretching
+            delete_container = QWidget()
+            delete_container_layout = QHBoxLayout(delete_container)
+            delete_container_layout.setContentsMargins(0, 0, 0, 0)
+            delete_container_layout.addStretch()
+
             if class_info.get('custom', False):
                 delete_btn = QPushButton("🗑️")
-                delete_btn.setMaximumWidth(40)
+                delete_btn.setFixedSize(35, 25)  # Fixed size to prevent expansion
                 delete_btn.setToolTip(f"ลบ {class_info['thai']}")
                 delete_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #dc3545;
                         color: white;
                         border: none;
-                        padding: 4px;
+                        padding: 2px;
                         border-radius: 3px;
                     }
                     QPushButton:hover {
@@ -355,10 +361,10 @@ class PPEClassConfigWidget(QWidget):
                     lambda checked, cls=class_name: self.delete_custom_ppe(cls)
                 )
                 self.delete_buttons[class_name] = delete_btn
-                row_layout.addWidget(delete_btn, stretch=1)
-            else:
-                # Empty space for alignment
-                row_layout.addWidget(QLabel(""), stretch=1)
+                delete_container_layout.addWidget(delete_btn)
+
+            delete_container_layout.addStretch()
+            row_layout.addWidget(delete_container, stretch=1)
 
             self.ppe_rows_layout.addLayout(row_layout)
 
