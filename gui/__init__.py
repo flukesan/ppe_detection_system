@@ -7,6 +7,8 @@ from .camera_widget import CameraWidget
 from .control_panel import ControlPanel
 from .stats_widget import StatsWidget
 from .alert_widget import AlertWidget
+from .keypoint_config_widget import KeypointConfigWidget
+from .ppe_class_config_widget import PPEClassConfigWidget
 
 __all__ = [
     "MainWindow",
@@ -14,4 +16,6 @@ __all__ = [
     "ControlPanel",
     "StatsWidget",
     "AlertWidget",
+    "KeypointConfigWidget",
+    "PPEClassConfigWidget",
 ]

@@ -47,13 +47,19 @@ class PPEDetector:
             print(f"❌ Error loading PPE model: {e}")
             raise
 
-    def detect(self, frame: np.ndarray, roi: Optional[List[int]] = None) -> List[Dict[str, Any]]:
+    def detect(
+        self,
+        frame: np.ndarray,
+        roi: Optional[List[int]] = None,
+        enabled_classes: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Detect PPE items in the frame or ROI.
 
         Args:
             frame: Input image (BGR format)
             roi: Region of interest [x1, y1, x2, y2] or None for full frame
+            enabled_classes: List of class names to detect (None = all)
 
         Returns:
             List of PPE detections, each containing:
@@ -99,6 +105,10 @@ class PPEDetector:
 
             for box, conf, cls_id in zip(boxes, confidences, class_ids):
                 class_name = self.class_names[cls_id]
+
+                # Filter by enabled classes
+                if enabled_classes is not None and class_name not in enabled_classes:
+                    continue
 
                 # Convert bbox to original frame coordinates
                 bbox = [
