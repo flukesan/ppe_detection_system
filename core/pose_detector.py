@@ -193,6 +193,7 @@ class PoseDetector:
         keypoints: np.ndarray,
         color: Tuple[int, int, int] = (0, 255, 0),
         thickness: int = 2,
+        enabled_keypoints: Optional[List[int]] = None,
     ) -> np.ndarray:
         """
         Draw pose keypoints and skeleton on the frame.
@@ -202,10 +203,17 @@ class PoseDetector:
             keypoints: Array of shape (17, 3)
             color: Color for drawing
             thickness: Line thickness
+            enabled_keypoints: List of keypoint indices to draw (None = all)
 
         Returns:
             Frame with drawn keypoints
         """
+        # Use all keypoints if not specified
+        if enabled_keypoints is None:
+            enabled_keypoints = list(range(17))
+
+        enabled_set = set(enabled_keypoints)
+
         # COCO skeleton connections
         skeleton = [
             [0, 1], [0, 2], [1, 3], [2, 4],  # Head
@@ -214,17 +222,26 @@ class PoseDetector:
             [11, 13], [13, 15], [12, 14], [14, 16],  # Legs
         ]
 
-        # Draw skeleton connections
+        # Draw skeleton connections (only if both endpoints are enabled)
         for connection in skeleton:
-            kpt1, kpt2 = keypoints[connection[0]], keypoints[connection[1]]
+            kpt_idx1, kpt_idx2 = connection[0], connection[1]
+
+            # Check if both keypoints are enabled
+            if kpt_idx1 not in enabled_set or kpt_idx2 not in enabled_set:
+                continue
+
+            kpt1, kpt2 = keypoints[kpt_idx1], keypoints[kpt_idx2]
 
             if kpt1[2] > 0.5 and kpt2[2] > 0.5:
                 pt1 = (int(kpt1[0]), int(kpt1[1]))
                 pt2 = (int(kpt2[0]), int(kpt2[1]))
                 cv2.line(frame, pt1, pt2, color, thickness)
 
-        # Draw keypoints
-        for kpt in keypoints:
+        # Draw keypoints (only enabled ones)
+        for idx, kpt in enumerate(keypoints):
+            if idx not in enabled_set:
+                continue
+
             if kpt[2] > 0.5:
                 center = (int(kpt[0]), int(kpt[1]))
                 cv2.circle(frame, center, 4, color, -1)

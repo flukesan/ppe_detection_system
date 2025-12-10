@@ -15,6 +15,7 @@ from .camera_widget import CameraWidget
 from .control_panel import ControlPanel
 from .stats_widget import StatsWidget
 from .alert_widget import AlertWidget
+from .config_dialog import ConfigDialog
 
 
 class MainWindow(QMainWindow):
@@ -217,13 +218,55 @@ class MainWindow(QMainWindow):
 
     def on_configure_ppe(self):
         """Open PPE configuration dialog."""
-        # TODO: Implement configuration dialog
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(
-            self,
-            "Configuration",
-            "PPE configuration dialog will be implemented here."
-        )
+        # Initialize config if not exists
+        if "detection_config" not in self.config:
+            self.config["detection_config"] = {
+                "keypoints": {
+                    "enabled_keypoints": list(range(17)),  # All keypoints
+                    "show_all": True,
+                },
+                "ppe_classes": {
+                    "enabled_classes": ["helmet", "vest", "gloves", "boots", "goggles", "mask"],
+                    "required_classes": ["helmet", "vest"],
+                },
+            }
+
+        # Create and show dialog
+        dialog = ConfigDialog(self, self.config.get("detection_config", {}))
+        dialog.config_applied.connect(self.on_detection_config_changed)
+
+        if dialog.exec():
+            # Configuration was accepted
+            self.status_bar.showMessage("ตั้งค่าการตรวจจับเรียบร้อย")
+
+    def on_detection_config_changed(self, config: Dict[str, Any]):
+        """
+        Handle detection configuration changes.
+
+        Args:
+            config: New configuration
+        """
+        # Update config
+        self.config["detection_config"] = config
+
+        # Apply to camera widget/detector
+        if hasattr(self.camera_widget, 'detector') and self.camera_widget.detector:
+            # Update keypoints filter
+            enabled_keypoints = config["keypoints"]["enabled_keypoints"]
+            self.camera_widget.detector.set_enabled_keypoints(enabled_keypoints)
+
+            # Update PPE classes filter
+            enabled_classes = config["ppe_classes"]["enabled_classes"]
+            required_classes = config["ppe_classes"]["required_classes"]
+
+            # Update PPE detector
+            self.camera_widget.detector.set_enabled_ppe_classes(enabled_classes)
+            self.camera_widget.detector.set_required_ppe(required_classes)
+
+            print(f"✅ Updated detection config:")
+            print(f"   Enabled keypoints: {len(enabled_keypoints)}/17")
+            print(f"   Enabled PPE: {enabled_classes}")
+            print(f"   Required PPE: {required_classes}")
 
     def on_about(self):
         """Show about dialog."""

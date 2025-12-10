@@ -68,6 +68,10 @@ class PoseBasedDetector:
         self.frame_count = 0
         self.fps = 0.0
 
+        # Configuration for selective detection
+        self.enabled_keypoints = None  # None = all keypoints enabled
+        self.enabled_ppe_classes = None  # None = all classes enabled
+
         print("✅ PPE Detection System initialized successfully!")
 
     def process_frame(self, frame: np.ndarray) -> Dict[str, Any]:
@@ -112,7 +116,11 @@ class PoseBasedDetector:
                 roi = bbox
 
             # Detect PPE in ROI
-            ppe_detections = self.ppe_detector.detect(frame, roi)
+            ppe_detections = self.ppe_detector.detect(
+                frame,
+                roi,
+                enabled_classes=self.enabled_ppe_classes
+            )
 
             # Check compliance
             compliance = self.ppe_detector.check_compliance(ppe_detections)
@@ -214,7 +222,13 @@ class PoseBasedDetector:
 
             # Draw keypoints if enabled
             if self.config["ui"]["display"]["show_pose_keypoints"] and keypoints is not None:
-                self.pose_detector.draw_keypoints(frame, keypoints, color, 2)
+                self.pose_detector.draw_keypoints(
+                    frame,
+                    keypoints,
+                    color,
+                    2,
+                    enabled_keypoints=self.enabled_keypoints
+                )
 
             # Draw PPE detections
             self.ppe_detector.draw_detections(frame, ppe_detections, color, 1)
@@ -292,6 +306,24 @@ class PoseBasedDetector:
         """
         self.ppe_detector.set_required_ppe(required_ppe)
         self.config["detection"]["required_ppe"] = required_ppe
+
+    def set_enabled_keypoints(self, enabled_keypoints: Optional[List[int]]):
+        """
+        Set which keypoints to display.
+
+        Args:
+            enabled_keypoints: List of keypoint indices to display (0-16), or None for all
+        """
+        self.enabled_keypoints = enabled_keypoints
+
+    def set_enabled_ppe_classes(self, enabled_classes: Optional[List[str]]):
+        """
+        Set which PPE classes to detect.
+
+        Args:
+            enabled_classes: List of PPE class names to detect, or None for all
+        """
+        self.enabled_ppe_classes = enabled_classes
 
     def get_config(self) -> Dict[str, Any]:
         """Get current configuration."""

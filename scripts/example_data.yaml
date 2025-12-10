@@ -1,0 +1,37 @@
+# PPE Detection Dataset Configuration
+# Example template - modify according to your dataset
+
+# Dataset root directory (absolute path recommended)
+path: /path/to/ppe_dataset
+
+# Paths relative to 'path'
+train: images/train  # Training images
+val: images/val      # Validation images
+test: images/test    # Test images (optional)
+
+# Number of classes
+nc: 6
+
+# Class names (must match annotation class IDs)
+names:
+  0: helmet
+  1: vest
+  2: gloves
+  3: boots
+  4: goggles
+  5: mask
+
+# Optional: Class descriptions
+# descriptions:
+#   helmet: "Safety helmet or hard hat"
+#   vest: "High-visibility safety vest"
+#   gloves: "Safety gloves"
+#   boots: "Safety boots"
+#   goggles: "Safety goggles or glasses"
+#   mask: "Face mask or respirator"
+
+# Optional: Download instructions (if dataset is hosted)
+# download: |
+#   # Instructions to download dataset
+#   wget https://example.com/ppe_dataset.zip
+#   unzip ppe_dataset.zip
