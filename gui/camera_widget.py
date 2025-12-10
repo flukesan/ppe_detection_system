@@ -33,7 +33,9 @@ class CameraWidget(QWidget):
         self.camera = None
         self.detector = None
         self.is_running = False
+        self.detection_enabled = False  # Separate flag for detection
         self.video_file = None
+        self.is_rtsp = False  # Track if current source is RTSP
 
         # Performance tracking
         self.frame_times = []
@@ -84,12 +86,15 @@ class CameraWidget(QWidget):
             if isinstance(camera_source, int):
                 source_type = "USB"
                 source_desc = f"Camera {camera_source}"
+                self.is_rtsp = False
             elif camera_source.startswith("rtsp://"):
                 source_type = "RTSP"
                 source_desc = "RTSP Camera"
+                self.is_rtsp = True
             else:
                 source_type = "File"
                 source_desc = camera_source
+                self.is_rtsp = False
 
             self.camera = cv2.VideoCapture(camera_source)
 
@@ -100,6 +105,12 @@ class CameraWidget(QWidget):
             # Set camera properties (if applicable)
             cam_conf = camera_config or self.config["camera"]
 
+            # For RTSP, reduce buffer size to minimize latency
+            if self.is_rtsp:
+                self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimal buffer
+                # Try to enable low latency mode
+                self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+
             # For USB and some RTSP cameras, we can set properties
             if isinstance(camera_source, int) or source_type == "RTSP":
                 self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, cam_conf["width"])
@@ -107,8 +118,13 @@ class CameraWidget(QWidget):
                 self.camera.set(cv2.CAP_PROP_FPS, cam_conf["fps"])
 
             self.is_running = True
+            # Detection is NOT enabled by default - user must start it manually
+            self.detection_enabled = False
             self.timer.start(30)  # 30ms = ~33 FPS
-            self.status_changed.emit(f"✅ {source_type} started: {source_desc}")
+            self.status_changed.emit(
+                f"✅ {source_type} connected: {source_desc} "
+                f"(Detection: {'ON' if self.detection_enabled else 'OFF'})"
+            )
 
         except Exception as e:
             self.status_changed.emit(f"❌ Error: {str(e)}")
@@ -116,6 +132,7 @@ class CameraWidget(QWidget):
     def stop_camera(self):
         """Stop camera capture."""
         self.is_running = False
+        self.detection_enabled = False
         self.timer.stop()
 
         if self.camera is not None:
@@ -124,6 +141,28 @@ class CameraWidget(QWidget):
 
         self.display_label.clear()
         self.status_changed.emit("Camera stopped")
+
+    def start_detection(self):
+        """Start detection processing."""
+        if not self.is_running:
+            self.status_changed.emit("⚠️ Please connect camera first")
+            return
+
+        if self.detector is None:
+            self.status_changed.emit("⚠️ Detector not initialized")
+            return
+
+        self.detection_enabled = True
+        self.status_changed.emit("✅ Detection started")
+
+    def stop_detection(self):
+        """Stop detection processing (camera keeps running)."""
+        self.detection_enabled = False
+        self.status_changed.emit("⏹️ Detection stopped (camera still running)")
+
+    def is_detection_running(self) -> bool:
+        """Check if detection is currently running."""
+        return self.detection_enabled
 
     def open_video_file(self, filename: str):
         """
@@ -157,8 +196,15 @@ class CameraWidget(QWidget):
 
         start_time = time.time()
 
-        # Read frame
-        ret, frame = self.camera.read()
+        # For RTSP streams, skip buffered frames to get the latest frame
+        if self.is_rtsp:
+            # Grab and decode only the latest frame (skip buffered frames)
+            for _ in range(2):  # Skip 1-2 buffered frames
+                self.camera.grab()
+            ret, frame = self.camera.retrieve()
+        else:
+            # For USB/File, read normally
+            ret, frame = self.camera.read()
 
         if not ret:
             # End of video or camera error
@@ -167,8 +213,8 @@ class CameraWidget(QWidget):
                 self.status_changed.emit("Video finished")
             return
 
-        # Process detection if detector is available
-        if self.detector is not None:
+        # Process detection ONLY if enabled
+        if self.detection_enabled and self.detector is not None:
             try:
                 results = self.detector.process_frame(frame)
                 annotated_frame = results["annotated_frame"]
@@ -192,7 +238,32 @@ class CameraWidget(QWidget):
                 annotated_frame = frame
                 self.status_changed.emit(f"Detection error: {str(e)}")
         else:
-            annotated_frame = frame
+            # Just display the raw frame without detection
+            annotated_frame = frame.copy()
+
+            # Draw status indicator
+            status_text = "Detection: OFF" if not self.detection_enabled else "Detection: No Detector"
+            cv2.putText(
+                annotated_frame,
+                status_text,
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 165, 255),  # Orange color
+                2,
+            )
+
+            # Draw FPS even without detection
+            if self.config["ui"]["display"]["show_fps"]:
+                cv2.putText(
+                    annotated_frame,
+                    f"FPS: {self.fps:.1f}",
+                    (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2,
+                )
 
         # Display frame
         self.display_frame(annotated_frame)
