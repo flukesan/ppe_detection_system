@@ -122,6 +122,11 @@ class Track:
             bbox: [x1, y1, x2, y2]
         """
         cx, cy, s, r = z.flatten()
+
+        # Ensure s and r are positive to avoid sqrt of negative values
+        s = max(s, 1e-6)  # Area must be positive
+        r = max(r, 1e-6)  # Aspect ratio must be positive
+
         w = np.sqrt(s * r)
         h = s / max(w, 1e-6)
         x1 = cx - w / 2
