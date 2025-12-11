@@ -264,7 +264,9 @@ class MultiCameraWidget(QWidget):
         # Process fusion detection if enabled
         if self.detection_enabled and self.fusion_detector is not None:
             try:
-                results = self.fusion_detector.process_frames(frames)
+                # Don't show zones in fullscreen mode
+                show_zones = not (self.fullscreen_widget and self.fullscreen_widget.isVisible())
+                results = self.fusion_detector.process_frames(frames, show_zones=show_zones)
                 annotated_frame = results.get("annotated_frame")
 
                 if annotated_frame is not None:

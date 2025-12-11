@@ -9,6 +9,7 @@ from .pose_detector import PoseDetector
 from .ppe_detector import PPEDetector
 from .tracker import PersonTracker
 from .temporal_filter import TemporalFilter
+from .zone_manager import ZoneManager
 
 # Import device selector for auto GPU detection
 import sys
@@ -75,6 +76,9 @@ class PoseBasedDetector:
             violation_threshold=config["temporal_filter"]["violation_threshold"],
         )
 
+        # Zone manager for detection zones
+        self.zone_manager = ZoneManager()
+
         self.frame_count = 0
         self.fps = 0.0
 
@@ -84,12 +88,13 @@ class PoseBasedDetector:
 
         print("✅ PPE Detection System initialized successfully!")
 
-    def process_frame(self, frame: np.ndarray) -> Dict[str, Any]:
+    def process_frame(self, frame: np.ndarray, show_zones: bool = True) -> Dict[str, Any]:
         """
         Process a single frame through the complete pipeline.
 
         Args:
             frame: Input frame (BGR format)
+            show_zones: Whether to draw detection zones (False for fullscreen mode)
 
         Returns:
             Dictionary containing:
@@ -107,11 +112,25 @@ class PoseBasedDetector:
         # Step 2: Track persons
         tracked_persons = self.tracker.update(pose_detections)
 
-        # Step 3: Detect PPE for each person
+        # Step 2.5: Filter persons by detection zones
+        # Only process persons inside defined zones (if zones exist)
+        filtered_persons = []
+        for person in tracked_persons:
+            # Get person center point (use bbox center)
+            bbox = person["bbox"]
+            center_x = (bbox[0] + bbox[2]) / 2
+            center_y = (bbox[1] + bbox[3]) / 2
+            center_point = (center_x, center_y)
+
+            # Check if person is in any zone
+            if self.zone_manager.is_point_in_any_zone(center_point):
+                filtered_persons.append(person)
+
+        # Step 3: Detect PPE for each person in zone
         persons_with_ppe = []
         violations = []
 
-        for person in tracked_persons:
+        for person in filtered_persons:
             person_id = person["person_id"]
             bbox = person["bbox"]
             keypoints = person.get("keypoints")
@@ -164,13 +183,16 @@ class PoseBasedDetector:
         active_ids = [p["person_id"] for p in tracked_persons]
         self.temporal_filter.cleanup_old_tracks(active_ids)
 
-        # Step 5: Draw visualizations
+        # Step 5: Draw detection zones (if show_zones is True)
+        annotated_frame = self.zone_manager.draw_zones(annotated_frame, show_zones)
+
+        # Step 6: Draw visualizations
         annotated_frame = self._draw_results(
             annotated_frame,
             persons_with_ppe,
         )
 
-        # Step 6: Collect statistics
+        # Step 7: Collect statistics
         statistics = self._collect_statistics(persons_with_ppe)
 
         return {
