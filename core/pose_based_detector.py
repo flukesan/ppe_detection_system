@@ -10,6 +10,12 @@ from .ppe_detector import PPEDetector
 from .tracker import PersonTracker
 from .temporal_filter import TemporalFilter
 
+# Import device selector for auto GPU detection
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.device_selector import get_best_device
+
 
 class PoseBasedDetector:
     """
@@ -35,9 +41,13 @@ class PoseBasedDetector:
         # Initialize components
         print("🚀 Initializing PPE Detection System...")
 
-        # Get device from models config or fallback
-        pose_device = config.get("models", {}).get("yolov8_pose", {}).get("device", "cuda:0")
-        ppe_device = config.get("models", {}).get("ppe_detection", {}).get("device", "cuda:0")
+        # Get device from models config or auto-detect best device
+        pose_device_config = config.get("models", {}).get("yolov8_pose", {}).get("device", "auto")
+        ppe_device_config = config.get("models", {}).get("ppe_detection", {}).get("device", "auto")
+
+        # Auto-select best available device (GPU if available, otherwise CPU)
+        pose_device = get_best_device(pose_device_config)
+        ppe_device = get_best_device(ppe_device_config)
 
         self.pose_detector = PoseDetector(
             model_path=pose_model_path,
