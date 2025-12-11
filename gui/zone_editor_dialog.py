@@ -534,6 +534,13 @@ class ZoneEditorDialog(QDialog):
         self.color_button.setStyleSheet(
             f"background-color: rgb({r}, {g}, {b}); color: {'white' if (r + g + b) < 384 else 'black'};"
         )
+        # Force immediate update
+        self.color_button.update()
+        self.color_button.repaint()
+
+        # Process pending events to ensure immediate visual feedback
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     def on_save(self):
         """Handle save button click."""
