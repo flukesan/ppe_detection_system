@@ -34,7 +34,7 @@ multi_camera:
       fps: 30
     - width: 1280
       height: 720
-      fps: 30
+      fps: 15  # Lower FPS for RTSP to reduce bandwidth and errors
 
 # Fusion Algorithm Settings
 fusion:
