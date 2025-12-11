@@ -152,6 +152,14 @@ class MainWindow(QMainWindow):
         # View menu
         view_menu = menubar.addMenu("&View")
 
+        # Full screen action
+        fullscreen_action = QAction("🖥️ &Full Screen", self)
+        fullscreen_action.setShortcut("F11")
+        fullscreen_action.triggered.connect(self.on_toggle_fullscreen)
+        view_menu.addAction(fullscreen_action)
+
+        view_menu.addSeparator()
+
         toggle_pose_action = QAction("Show &Pose Keypoints", self, checkable=True)
         toggle_pose_action.setChecked(self.config["ui"]["display"]["show_pose_keypoints"])
         toggle_pose_action.triggered.connect(self.on_toggle_pose_keypoints)
@@ -457,6 +465,11 @@ class MainWindow(QMainWindow):
         """Toggle FPS display."""
         self.config["ui"]["display"]["show_fps"] = checked
         self.camera_widget.update_display_settings(self.config["ui"]["display"])
+
+    def on_toggle_fullscreen(self):
+        """Toggle full screen mode for camera display."""
+        if self.camera_widget:
+            self.camera_widget.toggle_fullscreen()
 
     def on_configure_ppe(self):
         """Open PPE configuration dialog."""

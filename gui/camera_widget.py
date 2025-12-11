@@ -4,11 +4,13 @@ Camera display widget with real-time detection visualization.
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QImage, QPixmap, QMouseEvent
 import cv2
 import numpy as np
 from typing import Dict, Any, Optional
 import time
+
+from .fullscreen_widget import FullScreenWidget
 
 
 class CameraWidget(QWidget):
@@ -40,6 +42,10 @@ class CameraWidget(QWidget):
         # Performance tracking
         self.frame_times = []
         self.fps = 0.0
+
+        # Full screen support
+        self.fullscreen_widget = None
+        self.current_frame = None  # Store current frame for full screen display
 
         self.setup_ui()
 
@@ -282,6 +288,14 @@ class CameraWidget(QWidget):
         Args:
             frame: Frame to display (BGR format)
         """
+        # Store current frame for full screen mode
+        self.current_frame = frame.copy()
+
+        # Update full screen display if active
+        if self.fullscreen_widget and self.fullscreen_widget.isVisible():
+            self.fullscreen_widget.display_frame(frame)
+            return
+
         # Convert BGR to RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -325,3 +339,35 @@ class CameraWidget(QWidget):
             display_settings: New display settings
         """
         self.config["ui"]["display"].update(display_settings)
+
+    def toggle_fullscreen(self):
+        """Toggle full screen mode for video display."""
+        if self.fullscreen_widget and self.fullscreen_widget.isVisible():
+            # Exit full screen
+            self.fullscreen_widget.close()
+            self.fullscreen_widget = None
+        else:
+            # Enter full screen
+            if self.current_frame is not None:
+                self.fullscreen_widget = FullScreenWidget()
+                self.fullscreen_widget.exit_fullscreen.connect(self.on_exit_fullscreen)
+                self.fullscreen_widget.display_frame(self.current_frame)
+                self.fullscreen_widget.show()
+
+    def on_exit_fullscreen(self):
+        """Handle exit from full screen mode."""
+        if self.fullscreen_widget:
+            self.fullscreen_widget.close()
+            self.fullscreen_widget = None
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent):
+        """
+        Handle mouse double-click to toggle full screen.
+
+        Args:
+            event: Mouse event
+        """
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.toggle_fullscreen()
+        else:
+            super().mouseDoubleClickEvent(event)
