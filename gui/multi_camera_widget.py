@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from typing import Dict, Any, Optional, List
 import time
+import os
 
 
 class MultiCameraWidget(QWidget):
@@ -160,8 +161,14 @@ class MultiCameraWidget(QWidget):
 
             # Set camera properties
             if is_rtsp:
+                # RTSP optimization for network streams
                 camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimal buffer
                 camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+                # Error tolerance for H.264 decoding issues
+                camera.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)  # 5 sec timeout
+                camera.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)  # 5 sec read timeout
+                # Use TCP instead of UDP for more reliable streaming
+                os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
 
             if isinstance(source, int) or is_rtsp:
                 camera.set(cv2.CAP_PROP_FRAME_WIDTH, config.get("width", 1280))
@@ -223,17 +230,23 @@ class MultiCameraWidget(QWidget):
 
         start_time = time.time()
 
-        # Read frames from all cameras
+        # Read frames from all cameras with error handling
         frames = []
         valid_cameras = []
 
         for i, camera in enumerate(self.cameras):
             if camera is not None and camera.isOpened():
-                ret, frame = camera.read()
-                if ret:
-                    frames.append(frame)
-                    valid_cameras.append(i)
-                else:
+                try:
+                    ret, frame = camera.read()
+                    if ret and frame is not None:
+                        frames.append(frame)
+                        valid_cameras.append(i)
+                    else:
+                        # Frame read failed, append None and continue
+                        frames.append(None)
+                except Exception as e:
+                    # Handle H.264 decoding errors gracefully
+                    # print(f"Warning: Camera {i} frame read error: {e}")
                     frames.append(None)
             else:
                 frames.append(None)
