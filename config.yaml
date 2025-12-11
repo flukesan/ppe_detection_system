@@ -70,6 +70,11 @@ detection:
     - helmet
     - vest
 
+  # Detection zones (polygon-based filtering)
+  # Only persons inside defined zones will be detected
+  # If no zones are defined, detection works everywhere
+  zones_file: "data/detection_zones.json"  # Path to zones file
+
 tracking:
   max_age: 30
   min_hits: 3

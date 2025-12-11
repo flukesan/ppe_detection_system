@@ -64,12 +64,14 @@ class FusionDetector:
     def process_frames(
         self,
         frames: List[np.ndarray],
+        show_zones: bool = True,
     ) -> Dict[str, Any]:
         """
         Process frames from multiple cameras and fuse results.
 
         Args:
             frames: List of frames from each camera (must match num_cameras)
+            show_zones: Whether to draw detection zones (False for fullscreen mode)
 
         Returns:
             Fused detection results
@@ -86,7 +88,7 @@ class FusionDetector:
                 # Handle missing frame (camera disconnected or error)
                 camera_results.append(None)
             else:
-                results = detector.process_frame(frame)
+                results = detector.process_frame(frame, show_zones=show_zones)
                 camera_results.append(results)
 
         # Step 2: Fuse results from all cameras

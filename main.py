@@ -172,6 +172,24 @@ def main():
                 config=config,
             )
 
+        # Load detection zones if configured
+        zones_file = config.get("detection", {}).get("zones_file", "data/detection_zones.json")
+        if os.path.exists(zones_file):
+            logger.info(f"📍 Loading detection zones from {zones_file}")
+            try:
+                if multi_camera_enabled:
+                    # For fusion detector, load zones for each camera detector
+                    for cam_detector in detector.detectors:
+                        cam_detector.zone_manager.load_from_file(zones_file)
+                else:
+                    # For single detector
+                    detector.zone_manager.load_from_file(zones_file)
+                logger.info(f"✅ Detection zones loaded successfully")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load detection zones: {e}")
+        else:
+            logger.info("📍 No detection zones configured (detecting everywhere)")
+
         # Set detector to window (which will set to camera widget)
         window.set_detector(detector)
 

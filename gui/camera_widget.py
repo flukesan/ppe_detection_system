@@ -222,7 +222,9 @@ class CameraWidget(QWidget):
         # Process detection ONLY if enabled
         if self.detection_enabled and self.detector is not None:
             try:
-                results = self.detector.process_frame(frame)
+                # Don't show zones in fullscreen mode
+                show_zones = not (self.fullscreen_widget and self.fullscreen_widget.isVisible())
+                results = self.detector.process_frame(frame, show_zones=show_zones)
                 annotated_frame = results["annotated_frame"]
 
                 # Draw FPS

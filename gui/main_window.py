@@ -22,6 +22,7 @@ from .control_panel import ControlPanel
 from .stats_widget import StatsWidget
 from .alert_widget import AlertWidget
 from .config_dialog import ConfigDialog
+from .zone_editor_dialog import ZoneEditorDialog
 
 
 class MainWindow(QMainWindow):
@@ -198,6 +199,14 @@ class MainWindow(QMainWindow):
         configure_action = QAction("&Configure PPE Requirements", self)
         configure_action.triggered.connect(self.on_configure_ppe)
         settings_menu.addAction(configure_action)
+
+        settings_menu.addSeparator()
+
+        # Zone management
+        zone_action = QAction("📍 Manage Detection &Zones", self)
+        zone_action.setShortcut("Ctrl+Z")
+        zone_action.triggered.connect(self.on_manage_zones)
+        settings_menu.addAction(zone_action)
 
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -519,6 +528,67 @@ class MainWindow(QMainWindow):
             print(f"   Required PPE: {required_classes}")
         else:
             print("ℹ️ Config saved - will be applied when detector is initialized")
+
+    def on_manage_zones(self):
+        """Open zone management dialog."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        # Check if detector is available
+        if not self.detector:
+            QMessageBox.warning(
+                self,
+                "No Detector",
+                "Please initialize the detector first before managing zones."
+            )
+            return
+
+        # Get current frame from camera widget
+        current_frame = None
+        if hasattr(self.camera_widget, 'current_frame') and self.camera_widget.current_frame is not None:
+            current_frame = self.camera_widget.current_frame
+        else:
+            # If no frame available, show warning
+            QMessageBox.information(
+                self,
+                "No Video Feed",
+                "Please start the camera first to see the video feed while drawing zones.\n\n"
+                "You can still create zones, but you won't see the video background."
+            )
+
+        # Get zone manager from detector
+        if self.multi_camera_enabled:
+            # For fusion detector, use the first camera's zone manager
+            zone_manager = self.detector.detectors[0].zone_manager
+        else:
+            zone_manager = self.detector.zone_manager
+
+        # Open zone editor dialog
+        dialog = ZoneEditorDialog(self, zone_manager, current_frame)
+
+        if dialog.exec():
+            # Save zones to file
+            zones_file = self.config.get("detection", {}).get("zones_file", "data/detection_zones.json")
+
+            # Create directory if it doesn't exist
+            import os
+            os.makedirs(os.path.dirname(zones_file), exist_ok=True)
+
+            # Save zones
+            zone_manager.save_to_file(zones_file)
+
+            # Apply zones to all detectors
+            if self.multi_camera_enabled:
+                # For fusion detector, apply to all camera detectors
+                for cam_detector in self.detector.detectors:
+                    cam_detector.zone_manager.from_dict(zone_manager.to_dict())
+                self.status_bar.showMessage(f"✅ Detection zones saved and applied to all cameras")
+            else:
+                self.status_bar.showMessage(f"✅ Detection zones saved to {zones_file}")
+
+            print(f"✅ Detection zones saved:")
+            print(f"   Total zones: {len(zone_manager.zones)}")
+            for zone in zone_manager.zones:
+                print(f"   - {zone.name}: {len(zone.points)} points")
 
     def on_about(self):
         """Show about dialog."""
