@@ -112,6 +112,27 @@ class ZoneDrawWidget(QLabel):
                 "ESC: Cancel",
             ]
             y_offset = 30
+
+            # Draw background box for instructions
+            max_text_width = 0
+            for instruction in instructions:
+                (text_w, text_h), _ = cv2.getTextSize(
+                    instruction, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+                )
+                max_text_width = max(max_text_width, text_w)
+
+            # Draw semi-transparent background
+            overlay = display_frame.copy()
+            cv2.rectangle(
+                overlay,
+                (5, 10),
+                (max_text_width + 25, y_offset + len(instructions) * 25),
+                (0, 0, 0),
+                -1
+            )
+            cv2.addWeighted(overlay, 0.7, display_frame, 0.3, 0, display_frame)
+
+            # Draw instruction text
             for instruction in instructions:
                 cv2.putText(
                     display_frame,
@@ -119,17 +140,8 @@ class ZoneDrawWidget(QLabel):
                     (10, y_offset),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
-                    (255, 255, 255),
+                    (0, 255, 0),  # Green text
                     2,
-                )
-                cv2.putText(
-                    display_frame,
-                    instruction,
-                    (10, y_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 0, 0),
-                    1,
                 )
                 y_offset += 25
 
@@ -209,8 +221,11 @@ class ZoneDrawWidget(QLabel):
         elif event.button() == Qt.MouseButton.RightButton:
             # Complete polygon
             if len(self.current_points) >= 3:
-                # Signal that polygon is complete
-                self.stop_drawing()
+                # Signal that polygon is complete by stopping drawing mode
+                # Don't call stop_drawing() here - let _check_drawing_completion() handle it
+                self.is_drawing = False
+                self.mouse_pos = None
+                self.update_display()
 
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events."""
@@ -385,7 +400,7 @@ class ZoneEditorDialog(QDialog):
         button_layout = QHBoxLayout()
 
         save_btn = QPushButton("💾 Save")
-        save_btn.clicked.connect(self.accept)
+        save_btn.clicked.connect(self.on_save)
         button_layout.addWidget(save_btn)
 
         cancel_btn = QPushButton("❌ Cancel")
@@ -427,21 +442,31 @@ class ZoneEditorDialog(QDialog):
     def _check_drawing_completion(self):
         """Check if drawing is complete."""
         if not self.draw_widget.is_drawing:
-            # Drawing stopped
-            points = self.draw_widget.stop_drawing()
-
-            if points and len(points) >= 3:
+            # Drawing stopped - get points without clearing them yet
+            if len(self.draw_widget.current_points) >= 3:
                 # Valid polygon
                 zone_name = self.zone_name_input.text().strip()
+                points = self.draw_widget.current_points.copy()
+
+                # Add zone to manager
                 self.zone_manager.add_zone(zone_name, points, self.current_zone_color)
                 self.update_zone_list()
                 self.zone_name_input.clear()
                 self.zones_changed.emit()
 
+                # Now clear the drawing
+                self.draw_widget.current_points = []
+                self.draw_widget.mouse_pos = None
+                self.draw_widget.update_display()
+            else:
+                # Not enough points, just clear
+                self.draw_widget.current_points = []
+                self.draw_widget.mouse_pos = None
+                self.draw_widget.update_display()
+
             # Re-enable button
             self.draw_zone_btn.setEnabled(True)
             self.draw_zone_btn.setText("✏️ Draw New Zone")
-            self.draw_widget.update_display()
         else:
             # Still drawing, check again later
             from PyQt6.QtCore import QTimer
@@ -509,3 +534,33 @@ class ZoneEditorDialog(QDialog):
         self.color_button.setStyleSheet(
             f"background-color: rgb({r}, {g}, {b}); color: {'white' if (r + g + b) < 384 else 'black'};"
         )
+
+    def on_save(self):
+        """Handle save button click."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        # Check if there are any zones
+        if len(self.zone_manager.zones) == 0:
+            reply = QMessageBox.question(
+                self,
+                "No Zones Defined",
+                "You haven't created any detection zones.\n\n"
+                "Without zones, detection will work everywhere.\n\n"
+                "Do you want to save anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+        # Show confirmation
+        zone_count = len(self.zone_manager.zones)
+        QMessageBox.information(
+            self,
+            "Zones Saved",
+            f"✅ Successfully saved {zone_count} detection zone{'s' if zone_count != 1 else ''}!\n\n"
+            f"Zones will be applied to the detection system.",
+            QMessageBox.StandardButton.Ok
+        )
+
+        # Accept the dialog
+        self.accept()
